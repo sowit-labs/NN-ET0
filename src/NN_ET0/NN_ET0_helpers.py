@@ -12,17 +12,19 @@ from pcse.util import penman_monteith
 
 
 def get_openweather_past5days(latitude, longitude, api_key):
-    """AI is creating summary for get_openweather_past5days
+    """Function that passes a request to OpenWeather API to retrieve a 5-day weather history from the given coordinates,
+    retrieves useful variables to be used in NN-ET0 computation, and outputs a Pandas weather dataframe formatted
+    with the standards of PCSE.
 
     Args:
-        latitude ([type]): [description]
-        longitude ([type]): [description]
-        api_key ([type]): [description]
+        latitude ([float]): [latitude (decimal degrees) of the point on which weather data must be retrieved]
+        longitude ([float]): [longitude (decimal degrees) of the point on which weather data must be retrieved]
+        api_key ([string]): [OpenWeather API key]
 
     Returns:
-        [type]: [description]
+        [dataframe]: [weather dataframe formatted with the standards of PCSE]
     """
-    #https://api.openweathermap.org/data/2.5/onecall/timemachine?lat={lat}&lon={lon}&dt={time}&appid={API key}
+
     df_past = pd.DataFrame()
 
     for i in range(1,6):
@@ -35,8 +37,8 @@ def get_openweather_past5days(latitude, longitude, api_key):
     df_past_2["TIMESTAMP_DAY"] = df_past.groupby("dt").mean().reset_index()["dt"]
     df_past_2["WIND"] = df_past.groupby("dt").mean().reset_index()["wind_speed"]
     df_past_2["TEMP"] = df_past.groupby("dt").mean().reset_index()["temp"]
-    df_past_2["TMIN"] = df_past.groupby("dt").min().reset_index()["temp"]
-    df_past_2["TMAX"] = df_past.groupby("dt").max().reset_index()["temp"]
+    df_past_2["TMIN"] = df_past[['temp', 'dt']].groupby("dt").min().reset_index()["temp"]
+    df_past_2["TMAX"] = df_past[['temp', 'dt']].groupby("dt").max().reset_index()["temp"]
     df_past_2["VAP"] = df_past.groupby("dt").mean().reset_index()["dew_point"]
     df_past_2["VAP"] = 6.11 * 10**((7.5 * df_past_2["VAP"])/(237.3 + df_past_2["VAP"]))
 
@@ -51,15 +53,17 @@ def get_openweather_past5days(latitude, longitude, api_key):
 
 
 def get_openweather_7daysforecast(latitude, longitude, api_key):
-    """AI is creating summary for get_openweather_7daysforecast
+    """Function that passes a request to OpenWeather API to retrieve a 7-day weather forecast from the given coordinates,
+    retrieves useful variables to be used in NN-ET0 computation, and outputs a Pandas weather dataframe formatted
+    with the standards of PCSE.
 
     Args:
-        latitude ([type]): [description]
-        longitude ([type]): [description]
-        api_key ([type]): [description]
+        latitude ([float]): [latitude (decimal degrees) of the point on which weather data must be retrieved]
+        longitude ([float]): [longitude (decimal degrees) of the point on which weather data must be retrieved]
+        api_key ([string]): [OpenWeather API key]
 
     Returns:
-        [type]: [description]
+        [dataframe]: [weather dataframe formatted with the standards of PCSE]
     """
 
     # requesting 7-day forecast data from OpenWeatherMap API
@@ -98,34 +102,48 @@ def get_openweather_7daysforecast(latitude, longitude, api_key):
 
 
 def modelName_from_coordinates(model_class,latitude,longitude):
-    """AI is creating summary for modelName_from_coordinates
+    """Simple function used to generate model name from queried coordinates and selected model class.
+    This functions is important in defining if a model trained at a specific location will be usable to perform
+    estimation in another location. It is specifically made to be used with NASA Power resolution of 0.5° x 0.5°,
+    explaining the *2/2 operations.
 
     Args:
-        model_class ([type]): [description]
-        latitude ([type]): [description]
-        longitude ([type]): [description]
+        model_class ([string]): [model class used for the training/estimation process. Can take one of the following values : "M1","M2","M3","M4","M5","M6","M7","M8" ]
+        latitude ([float]): [latitude (decimal degrees) of the point on which weather data is retrieved]
+        longitude ([float]): [longitude (decimal degrees) of the point on which weather data is retrieved]
 
     Returns:
-        [type]: [description]
+        [string]: [name of the model]
     """
     return model_class+"_"+str(round(latitude * 2) / 2)+"_"+str(round(longitude * 2) / 2)
 
 
 def train_ANN(model_class, latitude, longitude, force_training=False, pctTest=0.01, loops=30, epochs=30, path="../data/"):
-    """AI is creating summary for train_ANN
+    """ Function that performs the training of ANN models. 
+    The function first checks if there is a pre-trained model available in the data folder, in which case it stalls.
+    Then, if no model was already trained for the combination of model class x location, the function will retrieve 
+    NASA Power dataset for the considered location, and will perform training of the ANN using the set of continuous 
+    variables defined by the model class.
+    Training is performed by fastai 1.0.61, which is now quite an old framework, but still pretty easy to use and that
+    gives reliable results. Trained models are saved in the data folder.
+    Some training parameters can be passed directly from the function call so that the number of trained models as well as
+    the number of epochs can be adjusted depending on the user needs.
+
+
+    To do : ajouter un argument verbose
 
     Args:
-        model_class ([type]): [description]
-        latitude ([type]): [description]
-        longitude ([type]): [description]
-        force_training (bool, optional): [description]. Defaults to False.
-        pctTest (float, optional): [description]. Defaults to 0.01.
-        loops (int, optional): [description]. Defaults to 30.
-        epochs (int, optional): [description]. Defaults to 30.
-        path (str, optional): [description]. Defaults to "../data/".
+        model_class ([string]): [model class used for the training/estimation process. Can take one of the following values : "M1","M2","M3","M4","M5","M6","M7","M8" ]
+        latitude ([float]): [latitude (decimal degrees) of the point on which NASA Power data is retrieved for model training]
+        longitude ([float]): [longitude (decimal degrees) of the point on which NASA Power data is retrieved for model training]
+        force_training (bool, optional): [if set to True, will perform model training and replace already trained models for the model class x location combination]. Defaults to False.
+        pctTest (float, optional): [decimal percentage of NASA Power data lines that are put into the test set and are not used for model training]. Defaults to 0.01.
+        loops (int, optional): [number of models to be trained]. Defaults to 30.
+        epochs (int, optional): [number of epochs on which each model is trained]. Defaults to 30.
+        path (str, optional): [path of the data folder]. Defaults to "../data/".
 
     Returns:
-        [type]: [description]
+        [dataframe]: [a dataframe presenting training and test performance of each of the models trained]
     """
     
     ### on vérifie si des modèles ont déjà été entraînés
@@ -299,21 +317,24 @@ def train_ANN(model_class, latitude, longitude, force_training=False, pctTest=0.
 
 
 def perform_ET0_prediction(model_class, latitude, longitude, dfPred, force_training=False, path='../data/', pctTest=0.01, loops=30, epochs=30):
-    """AI is creating summary for perform_ET0_prediction
+    """Function that performs prediction of ET0 values from measurements of meteorological variables compatible with
+    the selected model class. When given a weather dataframe formatted using the PCSE standards, this function first 
+    checks from the latitude and longitude and model class if there is a trained model available to perform estimation.
+    If yes, estimation is done immediately. If no, a model is first trained.
 
     Args:
-        model_class ([type]): [description]
-        latitude ([type]): [description]
-        longitude ([type]): [description]
-        dfPred ([type]): [description]
-        force_training (bool, optional): [description]. Defaults to False.
-        path (str, optional): [description]. Defaults to '../data/'.
-        pctTest (float, optional): [description]. Defaults to 0.01.
-        loops (int, optional): [description]. Defaults to 30.
-        epochs (int, optional): [description]. Defaults to 30.
+        model_class ([string]): [model class used for the training/estimation process. Can take one of the following values : "M1","M2","M3","M4","M5","M6","M7","M8" ]
+        latitude ([float]): [latitude (decimal degrees) of the point on which NASA Power data is retrieved for model training]
+        longitude ([float]): [longitude (decimal degrees) of the point on which NASA Power data is retrieved for model training]
+        dfPred ([dataframe]): [a weather dataframe on the PCSE format from which ET0 estimation will be done]
+        force_training (bool, optional): [if set to True, will perform model training and replace already trained models for the model class x location combination]. Defaults to False.
+        pctTest (float, optional): [decimal percentage of NASA Power data lines that are put into the test set and are not used for model training]. Defaults to 0.01.
+        loops (int, optional): [number of models to be trained]. Defaults to 30.
+        epochs (int, optional): [number of epochs on which each model is trained]. Defaults to 30.
+        path (str, optional): [path of the data folder]. Defaults to "../data/".
 
     Returns:
-        [type]: [description]
+        [dataframe]: [a dataframe including the ET0 estimation done by all models, as well as incertitude metrics and average value]
     """
     modelName = modelName_from_coordinates(model_class,latitude,longitude)
     
